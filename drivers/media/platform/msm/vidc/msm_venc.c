@@ -981,6 +981,7 @@ static int msm_venc_queue_setup(struct vb2_queue *q,
 	rc = msm_comm_try_state(inst, MSM_VIDC_OPEN_DONE);
 	if (rc) {
 		dprintk(VIDC_ERR, "Failed to open instance\n");
+		msm_comm_session_clean(inst);
 		return rc;
 	}
 
@@ -2448,6 +2449,7 @@ static int msm_venc_op_s_ctrl(struct v4l2_ctrl *ctrl)
 	if (rc) {
 		dprintk(VIDC_ERR,
 			"Failed to move inst: %p to start done state\n", inst);
+		msm_comm_session_clean(inst);
 		goto failed_open_done;
 	}
 
@@ -2967,6 +2969,14 @@ int msm_venc_prepare_buf(struct msm_vidc_inst *inst,
 
 	hdev = inst->core->device;
 
+    if (inst->state == MSM_VIDC_CORE_INVALID ||
+            inst->core->state == VIDC_CORE_INVALID) {
+        dprintk(VIDC_ERR,
+            "Core %p in bad state, ignoring prepare buf\n",
+                inst->core);
+        goto exit;
+    }
+
 	switch (b->type) {
 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
 		break;
@@ -3012,6 +3022,7 @@ int msm_venc_prepare_buf(struct msm_vidc_inst *inst,
 			"Buffer type not recognized: %d\n", b->type);
 		break;
 	}
+exit:
 	return rc;
 }
 

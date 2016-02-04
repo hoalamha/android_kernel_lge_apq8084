@@ -43,6 +43,9 @@
 #define set_mb(var, value)  do { var = value;  mb(); } while (0)
 #define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
+#define read_barrier_depends()		do {} while (0)
+#define smp_read_barrier_depends()	do {} while (0)
+
 #define smp_store_release(p, v)						\
 do {									\
 	compiletime_assert_atomic_type(*p);				\
@@ -57,9 +60,6 @@ do {									\
 	smp_mb();							\
 	___p1;								\
 })
-
-#define read_barrier_depends()		do {} while (0)
-#define smp_read_barrier_depends()	do {} while (0)
 
 #endif /* !__ASSEMBLY__ */
 #endif /* __ASM_GENERIC_BARRIER_H */

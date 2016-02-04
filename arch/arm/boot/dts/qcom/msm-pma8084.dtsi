@@ -36,9 +36,9 @@
 				     <0x0 0x8 0x5>;
 			interrupt-names = "kpdpwr", "resin",
 					"resin-bark", "kpdpwr-resin-bark";
-			qcom,pon-dbc-delay = <15625>;
+			qcom,pon-dbc-delay = <31250>;
 			qcom,system-reset;
-			qcom,s3-debounce = <32>;
+			qcom,s3-debounce = <128>;
 
 			qcom,pon_1 {
 				qcom,pon-type = <0>;
@@ -54,7 +54,6 @@
 
 			qcom,pon_3 {
 				qcom,pon-type = <3>;
-				qcom,support-reset = <1>;
 				qcom,s1-timer = <6720>;
 				qcom,s2-timer = <2000>;
 				qcom,s2-type = <7>;

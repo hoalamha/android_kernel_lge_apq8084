@@ -1524,6 +1524,21 @@ vfe_no_resource:
 	return rc;
 }
 
+#ifndef MY_ERROR_IRQ
+//struct axi_ctrl_t *my_axi_ctrl;
+void msm_vfe44_process_my_error_irq(void)
+{
+
+	printk("vfe32_irq: image master my bus overflow !!!!\n");
+
+
+/*	v4l2_subdev_notify(&my_axi_ctrl->subdev, NOTIFY_VFE_ERROR,
+		(void *)NULL);
+	vfe32_send_isp_msg(&my_axi_ctrl->subdev,
+		my_axi_ctrl->share_ctrl->vfeFrameId, MSG_ID_VFE_ERROR);
+*/
+}
+#endif
 static void msm_vfe44_get_error_mask(
 	uint32_t *error_mask0, uint32_t *error_mask1)
 {

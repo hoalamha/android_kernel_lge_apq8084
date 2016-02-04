@@ -1460,7 +1460,7 @@ parse_tag_3_packet(struct ecryptfs_crypt_stat *crypt_stat,
 		goto out_free;
 	/* A little extra work to differentiate among the AES key
 	 * sizes; see RFC2440 */
-	switch(data[(*packet_size)++]) {
+	switch (data[(*packet_size)++]) {
 	case RFC2440_CIPHER_AES_192:
 		crypt_stat->key_size = 24;
 		break;

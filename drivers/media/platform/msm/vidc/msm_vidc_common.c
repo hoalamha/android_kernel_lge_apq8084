@@ -734,12 +734,14 @@ static void handle_event_change(enum command_response cmd, void *data)
 				mutex_lock(&inst->sync_lock);
 
 				/* Decrement buffer reference count*/
+                mutex_lock(&inst->buff_lock);
 				list_for_each_entry(temp, &inst->registered_bufs, list) {
 					if (temp == binfo) {
 						buf_ref_put(inst, binfo);
 						break;
 					}
 				}
+                mutex_unlock(&inst->buff_lock);
 
 				/*
 				* Release buffer and remove from list
@@ -924,7 +926,6 @@ static void handle_session_flush(enum command_response cmd, void *data)
 static void handle_session_error(enum command_response cmd, void *data)
 {
 	struct msm_vidc_cb_cmd_done *response = data;
-	int rc;
 	struct hfi_device *hdev = NULL;
 	struct msm_vidc_inst *inst = NULL;
 
@@ -946,15 +947,6 @@ static void handle_session_error(enum command_response cmd, void *data)
 	hdev = inst->core->device;
 	dprintk(VIDC_WARN, "Session error received for session %p\n", inst);
 	change_inst_state(inst, MSM_VIDC_CORE_INVALID);
-
-	mutex_lock(&inst->lock);
-	dprintk(VIDC_DBG, "cleaning up inst: %p\n", inst);
-	rc = call_hfi_op(hdev, session_clean, inst->session);
-	if (rc)
-		dprintk(VIDC_ERR, "Session (%p) clean failed: %d\n", inst, rc);
-
-	inst->session = NULL;
-	mutex_unlock(&inst->lock);
 
 	if (response->status == VIDC_ERR_MAX_CLIENTS) {
 		dprintk(VIDC_WARN,
@@ -1024,9 +1016,7 @@ static void handle_sys_error(enum command_response cmd, void *data)
 	struct msm_vidc_cb_cmd_done *response = data;
 	struct msm_vidc_core *core = NULL;
 	struct sys_err_handler_data *handler = NULL;
-	struct hfi_device *hdev = NULL;
 	struct msm_vidc_inst *inst = NULL;
-	int rc = 0;
 
 	subsystem_crashed("venus");
 	if (!response) {
@@ -1054,19 +1044,6 @@ static void handle_sys_error(enum command_response cmd, void *data)
 			list) {
 		mutex_lock(&inst->lock);
 		inst->state = MSM_VIDC_CORE_INVALID;
-		if (inst->core)
-			hdev = inst->core->device;
-		if (hdev && inst->session) {
-			dprintk(VIDC_DBG,
-			"cleaning up inst: 0x%p\n", inst);
-			rc = call_hfi_op(hdev, session_clean,
-				(void *) inst->session);
-			if (rc)
-				dprintk(VIDC_ERR,
-					"Sess clean failed :%p\n",
-					inst);
-		}
-		inst->session = NULL;
 		mutex_unlock(&inst->lock);
 		msm_vidc_queue_v4l2_event(inst,
 				V4L2_EVENT_MSM_VIDC_SYS_ERROR);
@@ -1093,11 +1070,35 @@ static void handle_sys_error(enum command_response cmd, void *data)
 	schedule_delayed_work(&handler->work, msecs_to_jiffies(5000));
 }
 
+void msm_comm_session_clean(struct msm_vidc_inst *inst)
+{
+	int rc = 0;
+	struct hfi_device *hdev = NULL;
+
+	if (!inst || !inst->core || !inst->core->device) {
+		dprintk(VIDC_ERR, "%s invalid params\n", __func__);
+		return;
+	}
+
+	hdev = inst->core->device;
+	mutex_lock(&inst->lock);
+	if (hdev && inst->session) {
+		dprintk(VIDC_DBG, "cleaning up instance: 0x%p\n", inst);
+		rc = call_hfi_op(hdev, session_clean,
+				(void *) inst->session);
+		if (rc) {
+			dprintk(VIDC_ERR,
+				"Session clean failed :%p\n", inst);
+		}
+		inst->session = NULL;
+	}
+	mutex_unlock(&inst->lock);
+}
+
 static void handle_session_close(enum command_response cmd, void *data)
 {
 	struct msm_vidc_cb_cmd_done *response = data;
 	struct msm_vidc_inst *inst;
-	struct hfi_device *hdev = NULL;
 
 	if (response) {
 		inst = (struct msm_vidc_inst *)response->session_id;
@@ -1105,15 +1106,7 @@ static void handle_session_close(enum command_response cmd, void *data)
 			dprintk(VIDC_ERR, "%s invalid params\n", __func__);
 			return;
 		}
-		hdev = inst->core->device;
-		mutex_lock(&inst->lock);
-		if (inst->session) {
-			dprintk(VIDC_DBG, "cleaning up inst: 0x%p\n", inst);
-			call_hfi_op(hdev, session_clean,
-				(void *) inst->session);
-		}
-		inst->session = NULL;
-		mutex_unlock(&inst->lock);
+		msm_comm_session_clean(inst);
 		signal_session_msg_receipt(cmd, inst);
 		show_stats(inst);
 	} else {
@@ -1310,7 +1303,9 @@ static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
 			dprintk(VIDC_DBG,
 				"_F_B_D_ fd[0] = %d -> FBD_ref_released, addr: 0x%x\n",
 				binfo->fd[0], device_addr);
+            mutex_lock(&inst->buff_lock);
 			buf_ref_put(inst, binfo);
+            mutex_unlock(&inst->buff_lock);
 		}
 	}
 }
@@ -1440,8 +1435,6 @@ static void handle_fbd(enum command_response cmd, void *data)
 			vb->v4l2_buf.flags |= V4L2_QCOM_BUF_DATA_CORRUPT;
 		if (fill_buf_done->flags1 & HAL_BUFFERFLAG_DROP_FRAME)
 			vb->v4l2_buf.flags |= V4L2_QCOM_BUF_DROP_FRAME;
-		if (fill_buf_done->flags1 & HAL_BUFFERFLAG_MBAFF)
-			vb->v4l2_buf.flags |= V4L2_MSM_BUF_FLAG_MBAFF;
 		if (fill_buf_done->flags1 &
 			HAL_BUFFERFLAG_TS_DISCONTINUITY)
 			vb->v4l2_buf.flags |= V4L2_QCOM_BUF_TS_DISCONTINUITY;
@@ -3457,6 +3450,7 @@ void msm_comm_flush_dynamic_buffers(struct msm_vidc_inst *inst)
 	*		  should not queue back the buffer to f/w.
 	*		  Flush all buffers with ref_count 2.
 	*/
+	mutex_lock(&inst->buff_lock);
 	mutex_lock(&inst->lock);
 	if (!list_empty(&inst->registered_bufs)) {
 		struct v4l2_event buf_event = {0};
@@ -3487,6 +3481,7 @@ void msm_comm_flush_dynamic_buffers(struct msm_vidc_inst *inst)
 		}
 	}
 	mutex_unlock(&inst->lock);
+    mutex_unlock(&inst->buff_lock);
 }
 
 void msm_comm_flush_pending_dynamic_buffers(struct msm_vidc_inst *inst)
@@ -3512,6 +3507,7 @@ void msm_comm_flush_pending_dynamic_buffers(struct msm_vidc_inst *inst)
 	* before flushing them.
 	*/
 
+    mutex_lock(&inst->buff_lock);
 	list_for_each_entry(binfo, list, list) {
 		if (binfo && binfo->type ==
 			V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
@@ -3521,6 +3517,7 @@ void msm_comm_flush_pending_dynamic_buffers(struct msm_vidc_inst *inst)
 			buf_ref_put(inst, binfo);
 		}
 	}
+    mutex_unlock(&inst->buff_lock);
 }
 
 int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
@@ -3975,7 +3972,7 @@ static void msm_comm_generate_session_error(struct msm_vidc_inst *inst)
 	enum command_response cmd = SESSION_ERROR;
 	struct msm_vidc_cb_cmd_done response = {0};
 
-	dprintk(VIDC_WARN, "msm_comm_generate_session_error\n");
+       dprintk(VIDC_WARN, "msm_comm_generate_session_error\n");
 	if (!inst || !inst->core) {
 		dprintk(VIDC_ERR, "%s: invalid input parameters\n", __func__);
 		return;
@@ -4018,8 +4015,9 @@ int msm_comm_kill_session(struct msm_vidc_inst *inst)
 	 * the session send session_abort to firmware to clean up and release
 	 * the session, else just kill the session inside the driver.
 	 */
-	if (inst->state >= MSM_VIDC_OPEN_DONE &&
-			inst->state < MSM_VIDC_CLOSE_DONE) {
+    if ((inst->state >= MSM_VIDC_OPEN_DONE &&
+        inst->state < MSM_VIDC_CLOSE_DONE) ||
+        inst->state == MSM_VIDC_CORE_INVALID) {
 		struct hfi_device *hdev = inst->core->device;
 		int abort_completion = SESSION_MSG_INDEX(SESSION_ABORT_DONE);
 

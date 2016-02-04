@@ -113,6 +113,9 @@ ifeq ($(CONFIG_ARM_UNWIND),y)
 CFLAGS_ABI	+=-funwind-tables
 endif
 
+#mhi.ko insmod error
+CFLAGS_MODULE +=-fno-pic
+
 ifeq ($(CONFIG_THUMB2_KERNEL),y)
 AFLAGS_AUTOIT	:=$(call as-option,-Wa$(comma)-mimplicit-it=always,-Wa$(comma)-mauto-it)
 AFLAGS_NOWARN	:=$(call as-option,-Wa$(comma)-mno-warn-deprecated,-Wa$(comma)-W)
@@ -303,9 +306,15 @@ zinstall uinstall install: vmlinux
 %.dtb: scripts
 	$(Q)$(MAKE) $(build)=$(boot)/dts MACHINE=$(MACHINE) $(boot)/dts/$@
 
+# Build LGE dts files only
+ifeq ($(CONFIG_MACH_LGE),y)
+dtbs: scripts
+	$(Q)$(MAKE) $(build)=$(boot)/dts/lge MACHINE=$(MACHINE) dtbs
+else
 dtbs: scripts
 	$(Q)$(MAKE) $(build)=$(boot)/dts MACHINE=$(MACHINE) dtbs
 	$(Q)$(MAKE) $(build)=$(boot)/dts/qcom MACHINE=$(MACHINE) dtbs
+endif
 
 zImage-dtb: vmlinux scripts dtbs
 	$(Q)$(MAKE) $(build)=$(boot) MACHINE=$(MACHINE) $(boot)/$@

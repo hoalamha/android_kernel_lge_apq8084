@@ -262,6 +262,7 @@ struct msm_vidc_inst {
 	struct list_head list;
 	struct mutex sync_lock, lock;
 	struct msm_vidc_core *core;
+    struct mutex buff_lock;
 	int session_type;
 	void *session;
 	struct session_prop prop;

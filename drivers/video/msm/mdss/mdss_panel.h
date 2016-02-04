@@ -335,6 +335,8 @@ struct mdss_panel_info {
 	bool ulps_feature_enabled;
 	char dfps_update;
 	int new_fps;
+	int panel_max_fps;
+	int panel_max_vtotal;
 	u32 mode_gpio_state;
 	u32 xstart_pix_align;
 	u32 width_pix_align;
@@ -355,7 +357,6 @@ struct mdss_panel_info {
 	uint32_t panel_dead;
 
 	struct mdss_mdp_pp_tear_check te;
-	bool is_prim_panel;
 
 	struct lcd_panel_info lcdc;
 	struct fbc_panel_info fbc;
